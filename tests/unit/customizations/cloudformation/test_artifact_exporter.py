@@ -651,6 +651,65 @@ class TestArtifactExporter(unittest.TestCase):
             with self.assertRaises(ValueError):
                 Template(template_path, os.path.relpath(dirname), self.s3_uploader_mock)
 
+    @patch("awscli.customizations.cloudformation.artifact_exporter.os.system",)
+    def test_template_build(self, system_mock):
+        command = 'echo test'
+        template_str = """
+            AWSTemplateFormatVersion: '2010-09-09'
+            Build: %s
+        """ % command
+
+        with patch(
+                "awscli.customizations.cloudformation.artifact_exporter.open",
+                mock.mock_open(read_data=template_str)):
+            template = Template('./template_path', os.getcwd(), None)
+            template.export()
+
+        system_mock.assert_called_once_with(command)
+
+    @patch("awscli.customizations.cloudformation.artifact_exporter.os.chdir")
+    @patch("awscli.customizations.cloudformation.artifact_exporter.os.system")
+    def test_template_build_in_another_dir(self, system_mock, chdir_mock):
+        command = 'echo test'
+        working_dir = './child_dir'
+        template_str = """
+            AWSTemplateFormatVersion: '2010-09-09'
+            Build:
+                Command: %s
+                WorkingDir: %s
+        """ % (command, working_dir)
+
+        with patch(
+                "awscli.customizations.cloudformation.artifact_exporter.open",
+                mock.mock_open(read_data=template_str)):
+            template = Template('./template_path', os.getcwd(), None)
+            template.export()
+
+        system_mock.assert_called_once_with(command)
+        chdir_mock.assert_any_call(working_dir)
+
+    @patch("awscli.customizations.cloudformation.artifact_exporter.os.chdir")
+    @patch("awscli.customizations.cloudformation.artifact_exporter.os.system")
+    def test_template_build_in_calling_dir(self, system_mock, chdir_mock):
+        command = 'echo test'
+        working_dir = 'CALLING'
+        parent_dir = os.path.abspath('..')
+        template_str = """
+            AWSTemplateFormatVersion: '2010-09-09'
+            Build:
+                Command: %s
+                WorkingDir: %s
+        """ % (command, working_dir)
+
+        with patch(
+                "awscli.customizations.cloudformation.artifact_exporter.open",
+                mock.mock_open(read_data=template_str)):
+            template = Template('./template_path', parent_dir, None)
+            template.export()
+
+        system_mock.assert_called_once_with(command)
+        chdir_mock.assert_any_call(parent_dir)
+
     def test_make_zip(self):
         test_file_creator = FileCreator()
         test_file_creator.append_file('index.js',

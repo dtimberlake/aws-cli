@@ -199,6 +199,16 @@ def mktempfile():
             os.remove(filename)
 
 
+@contextmanager
+def chdir(dir_path):
+    current_dir = os.getcwd()
+    try:
+        os.chdir(dir_path)
+        yield
+    finally:
+        os.chdir(current_dir)
+
+
 class Resource(object):
     """
     Base class representing a CloudFormation resource that can be exported
@@ -394,6 +404,7 @@ class Template(object):
         self.template_dir = template_dir
         self.resources_to_export = resources_to_export
         self.uploader = uploader
+        self.parent_dir = parent_dir
 
     def export(self):
         """
@@ -403,6 +414,8 @@ class Template(object):
         :return: The template with references to artifacts that have been
         exported to s3.
         """
+        self.run_build()
+
         if "Resources" not in self.template_dict:
             return self.template_dict
 
@@ -418,3 +431,21 @@ class Template(object):
                 exporter.export(resource_id, resource_dict, self.template_dir)
 
         return self.template_dict
+
+    def run_build(self):
+        build_config = self.template_dict.get('Build')
+
+        if not build_config:
+            return
+
+        command = build_config
+        working_dir = self.template_dir
+
+        if isinstance(build_config, dict):
+            command = build_config.get('Command', '')
+            working_dir = build_config.get('WorkingDir')
+            if working_dir == 'CALLING':
+                working_dir = self.parent_dir
+
+        with chdir(working_dir):
+            os.system(command)
